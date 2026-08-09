@@ -1,0 +1,30 @@
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local Database & logs
+*.db
+backend/research_assistant.db
+backend/uvicorn.log
+backend/uploads/
+
+# Environment files (containing private API Keys and secrets)
+.env
+backend/.env
+frontend/.env
+*.env
+
+# Streamlit local configurations
+.streamlit/
+
+# OS files
+.DS_Store
+Thumbs.db
