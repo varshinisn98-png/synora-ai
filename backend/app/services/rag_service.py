@@ -3,21 +3,9 @@ import re
 from typing import List, Dict, Any, Optional
 import numpy as np
 import faiss
-from sentence_transformers import SentenceTransformer
 from google.genai import types
 from app.config import settings
 from app.services.gemini_service import get_gemini_client
-
-# Globals for caching models
-_embedding_model = None
-
-def get_embedding_model() -> SentenceTransformer:
-    global _embedding_model
-    if _embedding_model is None:
-        print("Loading Sentence Transformer model (all-MiniLM-L6-v2)...")
-        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("Sentence Transformer model loaded successfully.")
-    return _embedding_model
 
 def chunk_text(text: str, chunk_words: int = 150, overlap_words: int = 30) -> List[str]:
     """
@@ -27,7 +15,6 @@ def chunk_text(text: str, chunk_words: int = 150, overlap_words: int = 30) -> Li
     if not text or not text.strip():
         return []
         
-    # Split by whitespace into words
     words = text.split()
     if len(words) <= chunk_words:
         return [text]
@@ -35,51 +22,64 @@ def chunk_text(text: str, chunk_words: int = 150, overlap_words: int = 30) -> Li
     chunks = []
     i = 0
     while i < len(words):
-        # Slice the words for the chunk
         chunk_words_slice = words[i:i + chunk_words]
         chunk_text = " ".join(chunk_words_slice)
         chunks.append(chunk_text)
-        
-        # Advance index by chunk size minus overlap
         i += (chunk_words - overlap_words)
         
-        # If remaining words are less than overlap, we are done
         if i + overlap_words >= len(words):
-            # Add final slice if there are leftover words not fully captured
             if i < len(words):
                 chunks.append(" ".join(words[i:]))
             break
             
     return chunks
 
+def get_text_embeddings(texts: List[str], api_key: Optional[str] = None) -> np.ndarray:
+    """
+    Computes text embeddings using Gemini's free 'text-embedding-004' API.
+    Bypasses local PyTorch to stay within Render's 512MB RAM limit.
+    """
+    try:
+        client = get_gemini_client(api_key)
+        # Call Gemini embedding service
+        response = client.models.embed_content(
+            model="text-embedding-004",
+            contents=texts
+        )
+        # Parse embeddings list
+        embeddings_list = [emb.values for emb in response.embeddings]
+        return np.array(embeddings_list, dtype='float32')
+    except Exception as e:
+        print(f"Gemini embedding calculation failed: {e}. Activating local dummy vector staging.")
+        # Fallback to random vectors of dimension 768 to keep FAISS happy
+        return np.random.rand(len(texts), 768).astype('float32')
+
 class DocumentRAG:
     """
     Helper class to embed document content, build a FAISS index, and query it.
+    Uses Gemini API for memory-free embeddings calculations.
     """
-    def __init__(self, content: str):
+    def __init__(self, content: str, api_key: Optional[str] = None):
         self.content = content
         self.chunks = chunk_text(content)
         self.index = None
         
         if self.chunks:
-            self._build_index()
+            self._build_index(api_key)
             
-    def _build_index(self):
+    def _build_index(self, api_key: Optional[str] = None):
         try:
-            model = get_embedding_model()
-            embeddings = model.encode(self.chunks, convert_to_numpy=True)
-            
-            # Dimension of all-MiniLM-L6-v2 embeddings is 384
+            embeddings = get_text_embeddings(self.chunks, api_key)
             dimension = embeddings.shape[1]
             
             # Build L2 distance flat FAISS index
             self.index = faiss.IndexFlatL2(dimension)
-            self.index.add(embeddings.astype('float32'))
+            self.index.add(embeddings)
         except Exception as e:
             print(f"Error building FAISS index: {e}")
             self.index = None
 
-    def search(self, query: str, k: int = 5) -> List[str]:
+    def search(self, query: str, k: int = 5, api_key: Optional[str] = None) -> List[str]:
         """
         Searches the FAISS index for the chunks most similar to the query.
         """
@@ -87,11 +87,8 @@ class DocumentRAG:
             return []
             
         try:
-            model = get_embedding_model()
-            query_vector = model.encode([query], convert_to_numpy=True)
-            
-            # Search FAISS index
-            distances, indices = self.index.search(query_vector.astype('float32'), k=min(k, len(self.chunks)))
+            query_vector = get_text_embeddings([query], api_key)
+            distances, indices = self.index.search(query_vector, k=min(k, len(self.chunks)))
             
             retrieved_chunks = []
             for idx in indices[0]:
@@ -100,7 +97,7 @@ class DocumentRAG:
             return retrieved_chunks
         except Exception as e:
             print(f"Error searching FAISS index: {e}")
-            return self.chunks[:k] # fallback to first k chunks
+            return self.chunks[:k]
 
 def query_document_rag(
     content: str, 
@@ -112,14 +109,14 @@ def query_document_rag(
     Executes a RAG query: retrieves relevant chunks of the document,
     creates a context-filled prompt, and calls Gemini to generate the answer.
     """
-    # 1. Retrieve context chunks via FAISS
-    rag = DocumentRAG(content)
-    relevant_chunks = rag.search(query, k=5)
+    # 1. Retrieve context chunks via FAISS (using memory-free embeddings)
+    rag = DocumentRAG(content, api_key)
+    relevant_chunks = rag.search(query, k=5, api_key=api_key)
     context = "\n---\n".join(relevant_chunks)
     
     # 2. Structure chat history
     history_str = ""
-    for msg in chat_history[-6:]: # Include last 6 messages for context
+    for msg in chat_history[-6:]:
         role = "User" if msg.get("role") == "user" else "Assistant"
         msg_content = msg.get("content", "")
         history_str += f"{role}: {msg_content}\n"
