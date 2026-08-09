@@ -1,8 +1,15 @@
 # Synora AI - Intelligent Academic & Document Workspace
 
+### 🌐 Live Production Deployment Links:
+* **🚀 Web Application Dashboard**: [https://synora-ai-uivtv38xej58x4pwmkw374.streamlit.app/](https://synora-ai-uivtv38xej58x4pwmkw374.streamlit.app/)
+* **⚙️ Backend API Endpoint**: [https://synora-backend-lx8c.onrender.com/docs](https://synora-backend-lx8c.onrender.com/docs)
+* **🗄️ Cloud Storage Database**: Managed via **Supabase PostgreSQL**
+
+---
+
 Synora AI is a premium, light-themed academic document intelligence workspace designed to help researchers, students, and software engineers read, comprehend, and translate academic papers into practical implementations. 
 
-By leveraging the power of **Google Gemini**, **FAISS Vector Databases**, and **Sentence Transformers**, Synora AI automates the extraction of key literature insights, builds visual mind maps, organizes active recall study sessions, and translates theoretical designs into system engineering architecture blueprints.
+By leveraging the power of **Google Gemini**, **FAISS Vector Databases**, and **Supabase**, Synora AI automates the extraction of key literature insights, builds visual mind maps, organizes active recall study sessions, and translates theoretical designs into system engineering architecture blueprints.
 
 ---
 
