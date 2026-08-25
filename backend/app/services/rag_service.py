@@ -7,6 +7,9 @@ from google.genai import types
 from app.config import settings
 from app.services.gemini_service import get_gemini_client
 
+# In-memory global cache to store built FAISS indexes per document
+_rag_cache: Dict[int, Any] = {}
+
 def chunk_text(text: str, chunk_words: int = 150, overlap_words: int = 30) -> List[str]:
     """
     Splits the document text into overlapping chunks of words.
@@ -100,6 +103,7 @@ class DocumentRAG:
             return self.chunks[:k]
 
 def query_document_rag(
+    document_id: int,
     content: str, 
     query: str, 
     chat_history: List[Dict[str, str]] = [], 
@@ -108,9 +112,19 @@ def query_document_rag(
     """
     Executes a RAG query: retrieves relevant chunks of the document,
     creates a context-filled prompt, and calls Gemini to generate the answer.
+    Uses cached FAISS index if available to bypass rebuild latency.
     """
-    # 1. Retrieve context chunks via FAISS (using memory-free embeddings)
-    rag = DocumentRAG(content, api_key)
+    global _rag_cache
+    
+    # 1. Retrieve or build DocumentRAG from cache
+    if document_id in _rag_cache:
+        print(f"Reusing cached FAISS index for document ID {document_id}")
+        rag = _rag_cache[document_id]
+    else:
+        print(f"Building new FAISS index for document ID {document_id}")
+        rag = DocumentRAG(content, api_key)
+        _rag_cache[document_id] = rag
+        
     relevant_chunks = rag.search(query, k=5, api_key=api_key)
     context = "\n---\n".join(relevant_chunks)
     
@@ -168,3 +182,12 @@ Due to Gemini rate limits, I have retrieved the matching segments from the docum
             return answer
         else:
             return "No matching segments could be retrieved from the document locally, and the AI API is currently rate-limited. Please try again in a few seconds."
+
+def clear_rag_cache(document_id: int):
+    """
+    Removes cached FAISS index for the document when it is deleted.
+    """
+    global _rag_cache
+    if document_id in _rag_cache:
+        print(f"Evicting document ID {document_id} from FAISS memory cache.")
+        del _rag_cache[document_id]

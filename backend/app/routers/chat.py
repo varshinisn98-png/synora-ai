@@ -49,6 +49,7 @@ def chat_with_document(
     # 3. Query RAG pipeline (FAISS + Embeddings + Gemini API)
     try:
         answer = query_document_rag(
+            document_id=document_id,
             content=document.content,
             query=payload.query,
             chat_history=chat_history

@@ -173,6 +173,13 @@ def delete_document(
         except Exception as e:
             print(f"Error deleting file {file_path}: {e}")
             
+    # Clear from RAG memory cache
+    try:
+        from app.services.rag_service import clear_rag_cache
+        clear_rag_cache(document_id)
+    except Exception as e:
+        print(f"Error evicting from RAG cache: {e}")
+        
     db.delete(document)
     db.commit()
     return
