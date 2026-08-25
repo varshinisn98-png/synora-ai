@@ -111,8 +111,8 @@ def analyze_document(content: str, fallback_title: str, api_key: Optional[str] =
         client = get_gemini_client(api_key)
         
         text_length = len(content)
-        if text_length > 25000:
-            representative_text = content[:15000] + "\n\n[... TRUNCATED MIDDLE CONTENT ...]\n\n" + content[-8000:]
+        if text_length > 13000:
+            representative_text = content[:9000] + "\n\n[... TRUNCATED MIDDLE CONTENT ...]\n\n" + content[-4000:]
         else:
             representative_text = content
 
@@ -177,7 +177,7 @@ def generate_notes(title: str, content: str, api_key: Optional[str] = None) -> s
     """
     try:
         client = get_gemini_client(api_key)
-        representative_text = content[:40000] if len(content) > 40000 else content
+        representative_text = content[:15000] if len(content) > 15000 else content
         
         prompt = f"""
         You are a university professor. Generate highly structured, detailed, and comprehensive study/revision notes in Markdown format based on the following research paper.
@@ -255,7 +255,7 @@ def generate_quiz(title: str, content: str, api_key: Optional[str] = None) -> Qu
     """
     try:
         client = get_gemini_client(api_key)
-        representative_text = content[:30000] if len(content) > 30000 else content
+        representative_text = content[:12000] if len(content) > 12000 else content
         
         prompt = f"""
         You are an academic examiner. Based on the following research paper, generate 5 to 8 multiple-choice quiz questions (MCQs) to test a student's comprehension of this paper.
@@ -458,7 +458,7 @@ def generate_flashcards(title: str, content: str, api_key: Optional[str] = None)
     """
     try:
         client = get_gemini_client(api_key)
-        representative_text = content[:30000] if len(content) > 30000 else content
+        representative_text = content[:12000] if len(content) > 12000 else content
         
         prompt = f"""
         You are a study guide writer. Based on the following research paper content, generate a deck of 5 to 8 double-sided study flashcards.
@@ -572,7 +572,7 @@ def generate_industry_applications(title: str, content: str, api_key: Optional[s
     """
     try:
         client = get_gemini_client(api_key)
-        representative_text = content[:30000] if len(content) > 30000 else content
+        representative_text = content[:15000] if len(content) > 15000 else content
         
         prompt = f"""
         You are a Principal Cloud Architect and Product Strategist. Analyze the following research paper and translate its theoretical findings into practical software engineering architectures and business features.
