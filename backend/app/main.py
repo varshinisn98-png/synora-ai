@@ -2,8 +2,10 @@ import os
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine, Base, get_db
 from app.routers import auth, documents, chat
 
 # Create database tables automatically
@@ -85,6 +87,21 @@ def save_apikey(payload: ApiKeyPayload):
             "status": "warning", 
             "message": f"API key updated in memory only. Persistent write failed: {str(e)}"
         }
+
+@app.get("/api/health")
+def health_check(db: Session = Depends(get_db)):
+    """
+    Health check endpoint that queries the database.
+    Used by automated cron ping tools to prevent database pausing.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database connection failed: {str(e)}"
+        )
 
 @app.get("/")
 def read_root():
