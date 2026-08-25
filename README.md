@@ -1,7 +1,7 @@
 # Synora AI - Intelligent Academic & Document Workspace
 
 ### 🌐 Live Production Deployment Links:
-* **🚀 Web Application Dashboard**: [https://synora-ai-uivtv38xej58x4pwmkw374.streamlit.app/](https://synora-ai-uivtv38xej58x4pwmkw374.streamlit.app/)
+* **🚀 Web Application Dashboard**: [https://bit.ly/synora-ai](https://bit.ly/synora-ai)
 * **⚙️ Backend API Endpoint**: [https://synora-backend-lx8c.onrender.com/docs](https://synora-backend-lx8c.onrender.com/docs)
 * **🗄️ Cloud Storage Database**: Managed via **Supabase PostgreSQL**
 
@@ -41,8 +41,8 @@ Synora AI features a custom, high-fidelity light theme designed to avoid sterile
 | **Language** | Core | Python 3.13 |
 | **Frontend** | UI & Styling | Streamlit with custom CSS injector |
 | **Backend** | API Services | FastAPI |
-| **Database** | SQL Engine | SQLite (`research_assistant.db` via SQLAlchemy ORM) |
-| **RAG Pipeline** | Vector Search | FAISS & Sentence Transformers (`all-MiniLM-L6-v2`) |
+| **Database** | SQL Engine | PostgreSQL (Supabase pooler on port 6543 via SQLAlchemy) |
+| **RAG Pipeline** | Vector Search | FAISS & Gemini `text-embedding-004` Cloud API |
 | **PDF Extraction** | Text Parsing | PyMuPDF (fitz) |
 | **AI Processing** | LLM Engine | Gemini API (`gemini-2.5-flash` with structured Pydantic schemas) |
 
