@@ -312,13 +312,15 @@ def get_headers():
         return {"Authorization": f"Bearer {st.session_state.token}"}
     return {}
 
-# Check API key configuration on startup
-try:
-    res = requests.get(f"{BACKEND_URL}/api/settings/apikey")
-    if res.status_code == 200:
-        st.session_state.api_key_configured = res.json()["configured"]
-except Exception:
-    pass
+# Check API key configuration on startup only once
+if "api_key_status_checked" not in st.session_state or not st.session_state.api_key_status_checked:
+    try:
+        res = requests.get(f"{BACKEND_URL}/api/settings/apikey")
+        if res.status_code == 200:
+            st.session_state.api_key_configured = res.json()["configured"]
+            st.session_state.api_key_status_checked = True
+    except Exception:
+        pass
 
 # --- 1. SEPARATE AUTHENTICATION PAGE (IF NOT LOGGED IN) ---
 if not st.session_state.token:
@@ -414,13 +416,19 @@ if not st.session_state.token:
 
 # --- 2. WORKSPACE DASHBOARD PAGE (AFTER LOGGING IN) ---
 else:
-    all_documents = []
-    try:
-        doc_list_res = requests.get(f"{BACKEND_URL}/api/documents", headers=get_headers())
-        if doc_list_res.status_code == 200:
-            all_documents = doc_list_res.json()
-    except Exception:
-        pass
+    # Function to reload library cache
+    def refresh_library():
+        try:
+            res = requests.get(f"{BACKEND_URL}/api/documents", headers=get_headers())
+            if res.status_code == 200:
+                st.session_state.library_cache = res.json()
+        except Exception:
+            st.session_state.library_cache = []
+
+    if "library_cache" not in st.session_state:
+        refresh_library()
+        
+    all_documents = st.session_state.get("library_cache", [])
 
     with st.sidebar:
         st.markdown("""
@@ -442,6 +450,8 @@ else:
         st.markdown('<div class="btn-primary">', unsafe_allow_html=True)
         if st.button("➕ Ingest New Paper", use_container_width=True):
             st.session_state.active_document_id = None
+            if "active_document" in st.session_state:
+                del st.session_state.active_document
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         st.write("")
@@ -458,6 +468,8 @@ else:
                 with col1:
                     if st.button(f"{emoji} {doc_title}", key=f"sel_{doc['id']}", use_container_width=True):
                         st.session_state.active_document_id = doc["id"]
+                        if "active_document" in st.session_state:
+                            del st.session_state.active_document
                         st.rerun()
                 
                 with col2:
@@ -466,6 +478,11 @@ else:
                             requests.delete(f"{BACKEND_URL}/api/documents/{doc['id']}", headers=get_headers())
                             if st.session_state.active_document_id == doc["id"]:
                                 st.session_state.active_document_id = None
+                            # Invalidate cache to force reload
+                            if "library_cache" in st.session_state:
+                                del st.session_state.library_cache
+                            if "active_document" in st.session_state:
+                                del st.session_state.active_document
                             st.rerun()
                         except Exception as e:
                             st.error("Delete failed.")
@@ -535,6 +552,9 @@ else:
                                 result_doc = res.json()
                                 st.success("Document analyzed and indexed successfully!")
                                 st.session_state.active_document_id = result_doc["id"]
+                                st.session_state.active_document = result_doc
+                                if "library_cache" in st.session_state:
+                                    del st.session_state.library_cache
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
@@ -546,13 +566,19 @@ else:
     # CASE B: ACTIVE DOCUMENT DETAILED VIEW
     else:
         try:
-            res = requests.get(
-                f"{BACKEND_URL}/api/documents/{st.session_state.active_document_id}",
-                headers=get_headers()
-            )
+            doc = None
+            if "active_document" in st.session_state and st.session_state.active_document.get("id") == st.session_state.active_document_id:
+                doc = st.session_state.active_document
+            else:
+                res = requests.get(
+                    f"{BACKEND_URL}/api/documents/{st.session_state.active_document_id}",
+                    headers=get_headers()
+                )
+                if res.status_code == 200:
+                    doc = res.json()
+                    st.session_state.active_document = doc
             
-            if res.status_code == 200:
-                doc = res.json()
+            if doc:
                 meta = doc.get("metadata_info") or {}
                 
                 st.markdown(f"<h1 class='app-title' style='margin-bottom:0px;'>📄 {doc['title']}</h1>", unsafe_allow_html=True)
@@ -576,17 +602,30 @@ else:
                     
                 st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
                 
-                tab_overview, tab_mindmap, tab_chat, tab_study, tab_architecture, tab_compare = st.tabs([
+                if "active_tab" not in st.session_state:
+                    st.session_state.active_tab = "📊 Paper Overview"
+                    
+                nav_cols = st.columns(6)
+                tabs = [
                     "📊 Paper Overview", 
                     "🗺️ Concept Mind Map",
                     "💬 Chat with PDF (RAG)", 
                     "🎓 Study Companion", 
                     "🏗️ Industry Application",
                     "🔄 Literature Compare"
-                ])
+                ]
+                
+                for idx, t_name in enumerate(tabs):
+                    with nav_cols[idx]:
+                        b_type = "primary" if st.session_state.active_tab == t_name else "secondary"
+                        if st.button(t_name, key=f"nav_{idx}", use_container_width=True, type=b_type):
+                            st.session_state.active_tab = t_name
+                            st.rerun()
+                            
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
                 
                 # Tab 1: Paper Overview & Citations
-                with tab_overview:
+                if st.session_state.active_tab == "📊 Paper Overview":
                     st.markdown("""
                         <div class="glass-card-accent" style="margin-bottom: 25px;">
                             <h3 style="margin-top: 0px; color: #c084fc;">Executive Summary</h3>
@@ -635,7 +674,7 @@ else:
                                     st.code(cit_data.get("BibTeX", ""), language="text")
 
                 # Tab 2: Visual Concept Mind Map
-                with tab_mindmap:
+                elif st.session_state.active_tab == "🗺️ Concept Mind Map":
                     with st.spinner("Loading concept mind map..."):
                         mm_res = requests.get(f"{BACKEND_URL}/api/documents/{doc['id']}/mind-map", headers=get_headers())
                         if mm_res.status_code == 200:
@@ -658,7 +697,7 @@ else:
                             st.error("Failed to fetch concept map.")
 
                 # Tab 3: Chat with PDF
-                with tab_chat:
+                elif st.session_state.active_tab == "💬 Chat with PDF (RAG)":
                     st.subheader("Interactive Research Assistant")
                     st.write("Ask questions about this paper's formulas, datasets, algorithms, and conclusions:")
                     
@@ -707,7 +746,7 @@ else:
                         st.error("Failed to load chat history.")
                         
                 # Tab 4: Study Companion (Notes, Flashcards, Quiz)
-                with tab_study:
+                elif st.session_state.active_tab == "🎓 Study Companion":
                     subtab_notes, subtab_cards, subtab_quiz = st.tabs([
                         "📓 Detailed Revision Notes", 
                         "🎴 Active Recall Flashcards",
@@ -863,7 +902,7 @@ else:
                             st.info("Comprehension quiz is not yet generated.")
                             
                 # Tab 5: Industry Application Translator
-                with tab_architecture:
+                elif st.session_state.active_tab == "🏗️ Industry Application":
                     with st.spinner("Translating theoretical insights..."):
                         app_res = requests.get(f"{BACKEND_URL}/api/documents/{doc['id']}/applications", headers=get_headers())
                         if app_res.status_code == 200:
@@ -879,7 +918,7 @@ else:
                             st.error("Failed to load industry translation report.")
 
                 # Tab 6: Literature Compare
-                with tab_compare:
+                elif st.session_state.active_tab == "🔄 Literature Compare":
                     st.subheader("Side-by-Side Paper Comparison")
                     st.write("Select another paper from your library to compare methods, scopes, and results side-by-side:")
                     
